@@ -17,10 +17,14 @@ def main() -> None:
 
     line_count = 0
     with p.open("r", encoding="utf-8", errors="replace") as f:
-        for _ in f:
+        for line in f:
             line_count += 1
+            if line_count <= 2:
+                print("PREVIEW:", line.strip())
 
-    print(line_count)
+
+    print(f"Total lines: {line_count}")
+
 
 
 
