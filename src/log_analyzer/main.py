@@ -3,6 +3,8 @@ from pathlib import Path
 from collections import Counter, defaultdict
 import csv
 
+TOP_N_DEFAULT = 10
+
 def parse_dhcp_line(line: str) -> dict | None:
     parts = line.split()
     if len(parts) < 10:
@@ -21,6 +23,7 @@ def parse_dhcp_line(line: str) -> dict | None:
     }
 
 def write_counter_csv(path: Path, header_a: str, header_b: str, rows) -> None:
+    # "w" overwrites existing files
     with path.open("w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow([header_a, header_b])
@@ -37,7 +40,7 @@ def main() -> None:
         sys.exit(1)
 
     total_lines = 0
-    preview = []
+    preview: list[str] = []
 
     mac_counts = Counter()
     ip_counts = Counter()
@@ -74,7 +77,7 @@ def main() -> None:
             mac_to_ips[mac].add(assigned_ip)
             ip_to_macs[assigned_ip].add(mac)
 
-    # ---- Console output ----
+    # ---- Console output (Top 10 only) ----
     print("Preview (first 5 lines):")
     for pl in preview:
         print(pl)
@@ -105,27 +108,36 @@ def main() -> None:
     print(f"Stable devices (1 IP): {stable}")
     print(f"Churny devices (>1 IP): {churny}")
 
-    # ---- CSV export ----
-    out_dir = log_path.parent / "data"
+    print(f"\nTop {TOP_N_DEFAULT} MAC addresses (most DHCP events):")
+    for mac, cnt in mac_counts.most_common(TOP_N_DEFAULT):
+        print(f"{mac}: {cnt}")
+
+    print(f"\nTop {TOP_N_DEFAULT} assigned IPs (most leases/events):")
+    for ip, cnt in ip_counts.most_common(TOP_N_DEFAULT):
+        print(f"{ip}: {cnt}")
+
+    print(f"\nTop {TOP_N_DEFAULT} assignments (orig_h -> assigned_ip):")
+    for (orig_h, ip), cnt in assignment_counts.most_common(TOP_N_DEFAULT):
+        print(f"{orig_h} -> {ip}: {cnt}")
+
+    print(f"\nTop {TOP_N_DEFAULT} MACs by number of different IPs received (possible churn):")
+    for mac, n in mac_ip_variety[:TOP_N_DEFAULT]:
+        print(f"{mac}: {n} unique IPs")
+
+    print(f"\nTop {TOP_N_DEFAULT} IPs by number of different MACs seen (possible conflict/spoofing):")
+    for ip, n in ip_mac_variety[:TOP_N_DEFAULT]:
+        print(f"{ip}: {n} unique MACs")
+
+    # ---- CSV export (ALL rows) ----
+    out_dir = Path.cwd() / "data"
     out_dir.mkdir(exist_ok=True)
 
     mac_csv = out_dir / "dhcp_top_macs.csv"
     ip_csv = out_dir / "dhcp_top_ips.csv"
     churn_csv = out_dir / "dhcp_mac_ip_variety.csv"
 
-
-    write_counter_csv(
-        mac_csv,
-        "mac",
-        "dhcp_events",
-        mac_counts.most_common()
-    )
-    write_counter_csv(
-        ip_csv,
-        "assigned_ip",
-        "dhcp_events",
-        ip_counts.most_common()
-    )
+    write_counter_csv(mac_csv, "mac", "dhcp_events", mac_counts.most_common())
+    write_counter_csv(ip_csv, "assigned_ip", "dhcp_events", ip_counts.most_common())
     write_counter_csv(
         churn_csv,
         "mac",
@@ -133,10 +145,10 @@ def main() -> None:
         sorted(mac_ip_variety, key=lambda x: x[1], reverse=True)
     )
 
-    print("\nCSV files written:")
-    print(f"- {mac_csv.name}")
-    print(f"- {ip_csv.name}")
-    print(f"- {churn_csv.name}")
+    print("\nCSV files written (overwritten if existed):")
+    print(f"- {mac_csv}")
+    print(f"- {ip_csv}")
+    print(f"- {churn_csv}")
 
 if __name__ == "__main__":
     main()
